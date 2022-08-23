@@ -10,54 +10,32 @@ import os
 import re
 import sqlite3
 import sys
+from pprint import pprint
 
 
 def main(args):
     """Loop thru all the games and parse them."""
     if not os.path.isdir(args.dir):
-        print "The specified folder is not a directory."
+        print("The specified folder is not a directory.")
         sys.exit(1)
     NUMBER_OF_FILES = len(os.listdir(args.dir))
     if args.num_of_files:
         NUMBER_OF_FILES = args.num_of_files
-    print "Parsing", NUMBER_OF_FILES, "files"
+    print("Parsing"), NUMBER_OF_FILES, "files"
     sql = None
     if not args.stdout:
         sql = sqlite3.connect(args.database)
-        sql.execute("""PRAGMA foreign_keys = ON;""")
-        sql.execute("""CREATE TABLE airdates(
-            game INTEGER PRIMARY KEY,
-            airdate TEXT
-        );""")
-        sql.execute("""CREATE TABLE documents(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            clue TEXT,
-            answer TEXT
-        );""")
-        sql.execute("""CREATE TABLE categories(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            category TEXT UNIQUE
-        );""")
-        sql.execute("""CREATE TABLE clues(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            game INTEGER,
-            round INTEGER,
-            value INTEGER,
-            FOREIGN KEY(id) REFERENCES documents(id),
-            FOREIGN KEY(game) REFERENCES airdates(game)
-        );""")
-        sql.execute("""CREATE TABLE classifications(
-            clue_id INTEGER,
-            category_id INTEGER,
-            FOREIGN KEY(clue_id) REFERENCES clues(id),
-            FOREIGN KEY(category_id) REFERENCES categories(id)
-        );""")
+        f = open('schema.sql')
+        schema = f.read()
+        sql.execute(schema)
+        f.close()
+
     for i, file_name in enumerate(glob(os.path.join(args.dir, "*.html")), 1):
         with open(os.path.abspath(file_name)) as f:
             parse_game(f, sql, i)
     if not args.stdout:
         sql.commit()
-    print "All done"
+    print("All done")
 
 
 def parse_game(f, sql, gid):
@@ -118,26 +96,25 @@ def parse_round(bsoup, sql, rnd, gid, airdate):
 
 
 def insert(sql, clue):
+    date, value, round, category, category_id, clue, answer = clue
+
     """Inserts the given clue into the database."""
     # Clue is [game, airdate, round, category, value, clue, answer]
     # Note that at this point, clue[4] is False if round is 3
-    if "\\\'" in clue[6]:
-        clue[6] = clue[6].replace("\\\'", "'")
-    if "\\\"" in clue[6]:
-        clue[6] = clue[6].replace("\\\"", "\"")
+    if "\\\'" in answer:
+        answer = answer.replace("\\\'", "'")
+    if "\\\"" in answer:
+        answer = answer.replace("\\\"", "\"")
     if not sql:
-        print clue
+        print(clue)
         return
     sql.execute(
         "INSERT OR IGNORE INTO airdates VALUES(?, ?);",
         (clue[0], clue[1], )
     )
-    sql.execute("INSERT OR IGNORE INTO categories(category) VALUES(?);", (clue[3], ))
-    category_id = sql.execute("SELECT id FROM categories WHERE category=?;", (clue[3], )).fetchone()[0]
-    clue_id = sql.execute("INSERT INTO documents(clue, answer) VALUES(?, ?);", (clue[5], clue[6], )).lastrowid
-    sql.execute("INSERT INTO clues(game, round, value) VALUES(?, ?, ?);", (clue[0], clue[2], clue[4], ))
-    sql.execute("INSERT INTO classifications VALUES(?, ?)", (clue_id, category_id, ))
-
+    sql.execute("INSERT OR IGNORE INTO jarchive_categories(category) VALUES(?);", (category))
+    category_id = sql.execute("SELECT id FROM jarchive_categories WHERE category=?;", (category)).fetchone()[0]
+    sql.execute("INSERT INTO jarchive_clues(cat_id, clue, anwser, round, value, aired_at) VALUES(?, ?);", (category_id, clue, answer, round, value * 100 * round, date)).lastrowid
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

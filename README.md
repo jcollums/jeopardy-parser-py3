@@ -1,5 +1,9 @@
 [![No Maintenance Intended](http://unmaintained.tech/badge.svg)](http://unmaintained.tech/)
 
+Fork notes
+===============
+This is a more efficient version that writes a different database schema.
+
 Jeopardy parser
 ===============
 
